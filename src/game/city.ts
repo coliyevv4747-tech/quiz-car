@@ -24,6 +24,7 @@ export interface CityEnvironment {
   colliders: ColliderBox[];
   updateTrafficLights: (elapsedSec: number) => void;
   getSignalStateNear: (x: number, z: number) => 'green' | 'yellow' | 'red' | null;
+  setNightMode: (night: boolean) => void;
   dispose: () => void;
 }
 
@@ -516,6 +517,12 @@ export function buildCityEnvironment(
     return null;
   };
 
+  const setNightMode = (night: boolean) => {
+    skyMat.map = night ? textures.skyDomeNight : textures.skyDome;
+    skyMat.needsUpdate = true;
+    bulbMat.emissiveIntensity = night ? 2.4 : 1.0;
+  };
+
   const dispose = () => {
     group.traverse((obj) => {
       if ((obj as THREE.Mesh).isMesh) {
@@ -535,6 +542,7 @@ export function buildCityEnvironment(
     colliders,
     updateTrafficLights: wrappedUpdate,
     getSignalStateNear: wrappedSignalQuery,
+    setNightMode,
     dispose,
   };
 }

@@ -9,10 +9,12 @@ import { PauseModal, ResultModal } from './components/PauseResultModal';
 import { OfflineIndicator } from './components/PWAInstallButton';
 import { SettingsModal } from './components/SettingsModal';
 import { TouchControls } from './components/TouchControls';
-import { PARKING_MISSIONS } from './data/gameData';
+import { TuningModal } from './components/TuningModal';
+import { PARKING_MISSIONS, STREET_RACE_WAYPOINTS } from './data/gameData';
 import { soundEngine } from './game/audio';
 import {
   CameraMode,
+  CarCustomization,
   ControlScheme,
   GameMode,
   GarageAngle,
@@ -23,18 +25,30 @@ import {
   SaveData,
   ScreenState,
   SoundSettings,
+  TimeOfDay,
   VehicleId,
 } from './types/game';
 import { loadSaveData, persistSaveData } from './utils/storage';
 
+const GEAR_ORDER: GearMode[] = ['R', 'N', '1', '2', '3', '4', '5', '6'];
+
 const INITIAL_HUD: HudSnapshot = {
   speedKmh: 0,
-  gear: 'D',
-  rpmRatio: 0.12,
+  gear: '1',
+  rpmRatio: 0.14,
   steerNorm: 0,
   headlights: false,
   cameraMode: 0,
   elapsedSec: 0,
+  currentLapTimeSec: 0,
+  bestLapTimeSec: null,
+  lap: 1,
+  totalLaps: 3,
+  position: 4,
+  totalRacers: 4,
+  countdownText: null,
+  raceProgress: 0,
+  isDrifting: false,
   timeRemainingSec: null,
   collisions: 0,
   score: 0,
@@ -44,20 +58,19 @@ const INITIAL_HUD: HudSnapshot = {
   parkingHoldProgress: 0,
   parkingReverseWarning: false,
   checkpointIndex: 0,
-  totalCheckpoints: 10,
-  trafficSignalState: null,
+  totalCheckpoints: STREET_RACE_WAYPOINTS.length,
   warningMessage: null,
 };
 
 export default function App() {
   const [saveData, setSaveData] = useState<SaveData>(() => loadSaveData());
   const [screen, setScreen] = useState<ScreenState>('menu');
-  const [gameMode, setGameMode] = useState<GameMode>('parking');
+  const [gameMode, setGameMode] = useState<GameMode>('circuit');
   const [missionId, setMissionId] = useState<string>(PARKING_MISSIONS[0].id);
   const [cameraMode, setCameraMode] = useState<CameraMode>(0);
   const [headlights, setHeadlights] = useState<boolean>(false);
   const [garageAngle, setGarageAngle] = useState<GarageAngle>('front');
-  const [gear, setGear] = useState<GearMode>('D');
+  const [gear, setGear] = useState<GearMode>('1');
   const [restartNonce, setRestartNonce] = useState<number>(0);
   const [hud, setHud] = useState<HudSnapshot>(INITIAL_HUD);
   const [missionResult, setMissionResult] = useState<MissionResult | null>(null);
@@ -69,7 +82,7 @@ export default function App() {
     throttle: 0,
     brake: 0,
     handbrake: false,
-    gear: 'D',
+    gear: '1',
     horn: false,
   });
 
@@ -96,12 +109,12 @@ export default function App() {
   const startSession = useCallback((mode: GameMode, nextMissionId?: string) => {
     setGameMode(mode);
     if (nextMissionId) setMissionId(nextMissionId);
-    touchInputRef.current.gear = 'D';
+    touchInputRef.current.gear = '1';
     touchInputRef.current.throttle = 0;
     touchInputRef.current.brake = 0;
     touchInputRef.current.steer = 0;
     touchInputRef.current.handbrake = false;
-    setGear('D');
+    setGear('1');
     setMissionResult(null);
     setRestartNonce((n) => n + 1);
     setScreen('playing');
@@ -112,33 +125,81 @@ export default function App() {
       setMissionResult(result);
       setScreen('result');
 
-      if (result.success) {
-        updateSave((prev) => {
-          const next = { ...prev, parkingProgress: { ...prev.parkingProgress } };
-          if (result.mode === 'parking' && result.missionId) {
-            const old = next.parkingProgress[result.missionId];
-            next.parkingProgress[result.missionId] = {
-              completed: true,
-              bestTimeSec:
-                old?.bestTimeSec != null
-                  ? Math.min(old.bestTimeSec, result.timeSec)
-                  : result.timeSec,
-              bestScore: Math.max(old?.bestScore ?? 0, result.score),
-              stars: Math.max(old?.stars ?? 0, result.stars),
-            };
-            next.totalStars = Object.values(next.parkingProgress).reduce(
-              (acc, p) => acc + (p.stars || 0),
-              0
-            );
-          } else if (result.mode === 'city') {
-            next.cityBestScore = Math.max(next.cityBestScore, result.score);
+      updateSave((prev) => {
+        const next: SaveData = {
+          ...prev,
+          parkingProgress: { ...prev.parkingProgress },
+        };
+
+        if (result.mode === 'circuit') {
+          if (result.bestLapSec != null) {
+            next.bestCircuitLapSec =
+              prev.bestCircuitLapSec != null
+                ? Math.min(prev.bestCircuitLapSec, result.bestLapSec)
+                : result.bestLapSec;
           }
-          return next;
-        });
-      }
+          if (result.position === 1) {
+            next.raceWins = prev.raceWins + 1;
+          }
+        } else if (result.mode === 'street') {
+          if (result.success) {
+            next.bestStreetTimeSec =
+              prev.bestStreetTimeSec != null
+                ? Math.min(prev.bestStreetTimeSec, result.timeSec)
+                : result.timeSec;
+          }
+          if (result.position === 1) {
+            next.raceWins = prev.raceWins + 1;
+          }
+        } else if (result.mode === 'timeattack') {
+          if (result.bestLapSec != null) {
+            next.bestTimeAttackLapSec =
+              prev.bestTimeAttackLapSec != null
+                ? Math.min(prev.bestTimeAttackLapSec, result.bestLapSec)
+                : result.bestLapSec;
+          }
+        } else if (result.mode === 'parking' && result.missionId && result.success) {
+          const old = next.parkingProgress[result.missionId];
+          next.parkingProgress[result.missionId] = {
+            completed: true,
+            bestTimeSec:
+              old?.bestTimeSec != null
+                ? Math.min(old.bestTimeSec, result.timeSec)
+                : result.timeSec,
+            bestScore: Math.max(old?.bestScore ?? 0, result.score),
+            stars: Math.max(old?.stars ?? 0, result.stars),
+          };
+          next.totalStars = Object.values(next.parkingProgress).reduce(
+            (acc, p) => acc + (p.stars || 0),
+            0
+          );
+        }
+
+        return next;
+      });
     },
     [updateSave]
   );
+
+  const handleGearUp = useCallback(() => {
+    const idx = GEAR_ORDER.indexOf(touchInputRef.current.gear);
+    const next = GEAR_ORDER[Math.min(GEAR_ORDER.length - 1, idx + 1)];
+    if (next !== touchInputRef.current.gear) {
+      touchInputRef.current.gear = next;
+      setGear(next);
+      soundEngine.playGearShift();
+    }
+  }, []);
+
+  const handleGearDown = useCallback(() => {
+    const idx = GEAR_ORDER.indexOf(touchInputRef.current.gear);
+    const next = GEAR_ORDER[Math.max(0, idx - 1)];
+    if (next !== touchInputRef.current.gear) {
+      touchInputRef.current.gear = next;
+      setGear(next);
+      soundEngine.playGearShift();
+    }
+  }, []);
 
   const handleToggleCamera = useCallback(() => {
     setCameraMode((prev) => ((prev + 1) % 4) as CameraMode);
@@ -164,8 +225,12 @@ export default function App() {
   }, [updateSave]);
 
   const handleRestart = useCallback(() => {
-    touchInputRef.current.gear = 'D';
-    setGear('D');
+    touchInputRef.current.gear = '1';
+    touchInputRef.current.throttle = 0;
+    touchInputRef.current.brake = 0;
+    touchInputRef.current.steer = 0;
+    touchInputRef.current.handbrake = false;
+    setGear('1');
     setMissionResult(null);
     setRestartNonce((n) => n + 1);
     setScreen('playing');
@@ -189,6 +254,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [screen, gameMode, missionId, startSession]);
 
+  const activeCustomization = saveData.customizations[saveData.selectedVehicle];
   const currentMissionIdx = PARKING_MISSIONS.findIndex((m) => m.id === missionId);
   const hasNextMission =
     gameMode === 'parking' &&
@@ -201,9 +267,11 @@ export default function App() {
       <GameCanvas
         screen={screen}
         vehicleId={saveData.selectedVehicle}
-        colorId={saveData.selectedColor}
+        customization={activeCustomization}
         graphics={saveData.graphics}
         gameMode={gameMode}
+        timeOfDay={saveData.timeOfDay}
+        autoTransmission={saveData.autoTransmission}
         missionId={missionId}
         cameraMode={cameraMode}
         headlights={headlights}
@@ -215,6 +283,8 @@ export default function App() {
         onToggleCamera={handleToggleCamera}
         onToggleHeadlights={handleToggleHeadlights}
         onGearChange={setGear}
+        onGearUp={handleGearUp}
+        onGearDown={handleGearDown}
         onPauseToggle={handlePauseToggle}
       />
 
@@ -225,7 +295,7 @@ export default function App() {
         <div className="fixed top-14 left-1/2 z-50 flex w-[90%] max-w-sm -translate-x-1/2 items-center justify-between gap-2 rounded-xl border border-sky-400/70 bg-[#0d1422]/95 px-3.5 py-2 text-xs font-bold text-sky-100 shadow-2xl">
           <div className="flex items-center gap-2">
             <RotateCw className="h-4 w-4 shrink-0 text-sky-400" />
-            <span>Qulay haydash uchun telefonni gorizontal (yonlama) holatga burang.</span>
+            <span>Qulay poyga uchun telefonni gorizontal (yonlama) holatga burang.</span>
           </div>
           <button
             type="button"
@@ -244,10 +314,12 @@ export default function App() {
           selectedVehicle={saveData.selectedVehicle}
           graphics={saveData.graphics}
           soundMuted={!saveData.sound.master}
-          totalStars={saveData.totalStars}
-          cityBestScore={saveData.cityBestScore}
-          onPlayQuick={() => startSession('parking', PARKING_MISSIONS[0].id)}
+          raceWins={saveData.raceWins}
+          bestCircuitLapSec={saveData.bestCircuitLapSec}
+          onStartRace={() => startSession(gameMode, missionId)}
+          onOpenCars={() => setScreen('cars')}
           onOpenGarage={() => setScreen('garage')}
+          onOpenTuning={() => setScreen('tuning')}
           onOpenModes={() => setScreen('modes')}
           onOpenSettings={() => setScreen('settings')}
           onCycleGraphics={handleCycleGraphics}
@@ -255,21 +327,41 @@ export default function App() {
         />
       )}
 
-      {/* GARAGE */}
-      {screen === 'garage' && (
+      {/* CARS & GARAGE SHOWCASE */}
+      {(screen === 'cars' || screen === 'garage') && (
         <GarageModal
+          mode={screen}
           selectedVehicle={saveData.selectedVehicle}
-          selectedColor={saveData.selectedColor}
+          customization={activeCustomization}
           garageAngle={garageAngle}
           onSelectVehicle={(id: VehicleId) =>
             updateSave((prev) => ({ ...prev, selectedVehicle: id }))
           }
-          onSelectColor={(colorId: string) =>
-            updateSave((prev) => ({ ...prev, selectedColor: colorId }))
+          onSelectAngle={setGarageAngle}
+          onOpenTuning={() => setScreen('tuning')}
+          onStartRace={() => startSession(gameMode, missionId)}
+          onBack={() => setScreen('menu')}
+        />
+      )}
+
+      {/* CAR CUSTOMIZATION & PERFORMANCE TUNING */}
+      {screen === 'tuning' && (
+        <TuningModal
+          vehicleId={saveData.selectedVehicle}
+          customization={activeCustomization}
+          garageAngle={garageAngle}
+          onUpdateCustomization={(nextCustom: CarCustomization) =>
+            updateSave((prev) => ({
+              ...prev,
+              customizations: {
+                ...prev.customizations,
+                [prev.selectedVehicle]: nextCustom,
+              },
+            }))
           }
           onSelectAngle={setGarageAngle}
-          onDriveNow={() => startSession(gameMode, missionId)}
-          onBack={() => setScreen('menu')}
+          onStartRace={() => startSession(gameMode, missionId)}
+          onBack={() => setScreen('garage')}
         />
       )}
 
@@ -277,7 +369,13 @@ export default function App() {
       {screen === 'modes' && (
         <MissionsModal
           parkingProgress={saveData.parkingProgress}
-          cityBestScore={saveData.cityBestScore}
+          timeOfDay={saveData.timeOfDay}
+          bestCircuitLapSec={saveData.bestCircuitLapSec}
+          bestStreetTimeSec={saveData.bestStreetTimeSec}
+          bestTimeAttackLapSec={saveData.bestTimeAttackLapSec}
+          onChangeTimeOfDay={(t: TimeOfDay) =>
+            updateSave((prev) => ({ ...prev, timeOfDay: t }))
+          }
           onStartMode={(mode, mId) => startSession(mode, mId)}
           onBack={() => setScreen('menu')}
         />
@@ -288,12 +386,20 @@ export default function App() {
         <SettingsModal
           graphics={saveData.graphics}
           controlScheme={saveData.controlScheme}
+          timeOfDay={saveData.timeOfDay}
+          autoTransmission={saveData.autoTransmission}
           sound={saveData.sound}
           onChangeGraphics={(q: GraphicsQuality) =>
             updateSave((prev) => ({ ...prev, graphics: q }))
           }
           onChangeControlScheme={(c: ControlScheme) =>
             updateSave((prev) => ({ ...prev, controlScheme: c }))
+          }
+          onChangeTimeOfDay={(t: TimeOfDay) =>
+            updateSave((prev) => ({ ...prev, timeOfDay: t }))
+          }
+          onChangeAutoTransmission={(auto: boolean) =>
+            updateSave((prev) => ({ ...prev, autoTransmission: auto }))
           }
           onChangeSound={(s: SoundSettings) =>
             updateSave((prev) => ({ ...prev, sound: s }))
@@ -323,7 +429,8 @@ export default function App() {
           <TouchControls
             controlScheme={saveData.controlScheme}
             gear={gear}
-            onGearChange={setGear}
+            onGearUp={handleGearUp}
+            onGearDown={handleGearDown}
             touchInputRef={touchInputRef}
           />
         </>
@@ -335,6 +442,7 @@ export default function App() {
           onResume={() => setScreen('playing')}
           onRestart={handleRestart}
           onGarage={() => setScreen('garage')}
+          onTuning={() => setScreen('tuning')}
           onMainMenu={() => setScreen('menu')}
         />
       )}

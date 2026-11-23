@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Hand } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Hand } from 'lucide-react';
 import { soundEngine } from '../game/audio';
 import { ControlScheme, GearMode } from '../types/game';
 import { TouchInputRef } from './GameCanvas';
@@ -7,14 +7,16 @@ import { TouchInputRef } from './GameCanvas';
 interface TouchControlsProps {
   controlScheme: ControlScheme;
   gear: GearMode;
-  onGearChange: (gear: GearMode) => void;
+  onGearUp: () => void;
+  onGearDown: () => void;
   touchInputRef: React.MutableRefObject<TouchInputRef>;
 }
 
 export const TouchControls: React.FC<TouchControlsProps> = ({
   controlScheme,
   gear,
-  onGearChange,
+  onGearUp,
+  onGearDown,
   touchInputRef,
 }) => {
   const wheelRef = useRef<HTMLDivElement | null>(null);
@@ -41,7 +43,6 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
     const dx = clientX - cx;
     const dy = clientY - cy;
 
-    // Combine horizontal drag + radial angle for natural one-thumb steering
     let norm = -dx / (rect.width * 0.48);
     if (Math.abs(dy) > 10 && Math.hypot(dx, dy) > 18) {
       const angleFromTop = Math.atan2(-dx, -dy);
@@ -84,7 +85,7 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
       className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex items-end justify-between px-3 pb-3 sm:px-6 sm:pb-5"
       style={{ touchAction: 'none' }}
     >
-      {/* LEFT SIDE: STEERING WHEEL OR LEFT/RIGHT PADS */}
+      {/* LEFT SIDE: STEERING BUTTONS OR WHEEL */}
       <div className="pointer-events-auto flex items-end gap-3">
         {controlScheme === 'wheel' ? (
           <div
@@ -101,9 +102,8 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
               className="relative flex h-full w-full items-center justify-center transition-transform duration-75"
               style={{ transform: `rotate(${wheelVisualDeg}deg)` }}
             >
-              {/* Steering wheel spokes */}
               <div className="absolute inset-3 rounded-full border-[10px] border-slate-200/85" />
-              <div className="absolute top-3 h-3 w-4 rounded-sm bg-sky-400" />
+              <div className="absolute top-3 h-3 w-4 rounded-sm bg-rose-500" />
               <div className="h-3.5 w-28 rounded bg-slate-300/85" />
               <div className="absolute bottom-4 h-12 w-3.5 rounded bg-slate-300/85" />
               <div className="z-10 flex h-11 w-11 items-center justify-center rounded-full border-2 border-sky-400 bg-slate-900 text-[10px] font-bold tracking-wider text-sky-300">
@@ -138,7 +138,7 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
               className={`flex h-20 w-20 items-center justify-center rounded-2xl border-2 transition-transform sm:h-24 sm:w-24 ${
                 leftPressed
                   ? 'scale-95 border-sky-400 bg-sky-500/45 text-white'
-                  : 'border-slate-500/55 bg-[#090d16]/75 text-slate-100'
+                  : 'border-slate-500/60 bg-[#090d16]/75 text-slate-100'
               }`}
             >
               <ArrowLeft className="h-10 w-10" />
@@ -169,7 +169,7 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
               className={`flex h-20 w-20 items-center justify-center rounded-2xl border-2 transition-transform sm:h-24 sm:w-24 ${
                 rightPressed
                   ? 'scale-95 border-sky-400 bg-sky-500/45 text-white'
-                  : 'border-slate-500/55 bg-[#090d16]/75 text-slate-100'
+                  : 'border-slate-500/60 bg-[#090d16]/75 text-slate-100'
               }`}
             >
               <ArrowRight className="h-10 w-10" />
@@ -178,40 +178,53 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
         )}
       </div>
 
-      {/* RIGHT SIDE: GEAR SHIFTER + HANDBRAKE + BRAKE + ACCELERATOR PEDALS */}
+      {/* RIGHT SIDE: GEAR UP/DOWN + HANDBRAKE + BRAKE + ACCELERATOR */}
       <div className="pointer-events-auto flex flex-col items-end gap-2.5">
-        {/* Gear Selector + Handbrake Row */}
+        {/* Gear Up / Down + Current Gear + Handbrake */}
         <div className="flex items-center gap-2">
-          <div className="flex overflow-hidden rounded-xl border border-slate-600/70 bg-[#090d16]/85">
-            {(['D', 'N', 'R'] as GearMode[]).map((g) => (
-              <button
-                key={g}
-                type="button"
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  soundEngine.unlock();
-                  soundEngine.playGearShift();
-                  touchInputRef.current.gear = g;
-                  onGearChange(g);
-                }}
-                className={`px-3.5 py-2 text-sm font-extrabold tracking-wide transition-colors ${
-                  gear === g
-                    ? g === 'R'
-                      ? 'bg-amber-500 text-slate-950'
-                      : g === 'D'
-                      ? 'bg-emerald-500 text-slate-950'
-                      : 'bg-sky-500 text-slate-950'
-                    : 'text-slate-300 hover:bg-slate-800/80'
-                }`}
-              >
-                {g}
-              </button>
-            ))}
+          <div className="flex items-center overflow-hidden rounded-xl border border-slate-600/80 bg-[#090d16]/85">
+            <button
+              type="button"
+              aria-label="Uzatmani tushirish"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                soundEngine.unlock();
+                soundEngine.playGearShift();
+                onGearDown();
+              }}
+              className="flex h-10 w-10 items-center justify-center text-slate-200 hover:bg-slate-800 active:bg-sky-500/30"
+            >
+              <ChevronDown className="h-5 w-5" />
+            </button>
+            <div
+              className={`flex h-10 min-w-[36px] items-center justify-center px-2 text-sm font-black ${
+                gear === 'R'
+                  ? 'bg-amber-500 text-slate-950'
+                  : gear === 'N'
+                  ? 'bg-sky-500 text-slate-950'
+                  : 'bg-emerald-500/20 text-emerald-300'
+              }`}
+            >
+              {gear}
+            </div>
+            <button
+              type="button"
+              aria-label="Uzatmani ko'tarish"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                soundEngine.unlock();
+                soundEngine.playGearShift();
+                onGearUp();
+              }}
+              className="flex h-10 w-10 items-center justify-center text-slate-200 hover:bg-slate-800 active:bg-emerald-500/30"
+            >
+              <ChevronUp className="h-5 w-5" />
+            </button>
           </div>
 
           <button
             type="button"
-            aria-label="Qo'l tormozi"
+            aria-label="Qo'l tormozi / Drift"
             onPointerDown={(e) => {
               e.preventDefault();
               soundEngine.unlock();
@@ -231,20 +244,19 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
               touchInputRef.current.handbrake = false;
               setHbPressed(false);
             }}
-            className={`flex h-11 items-center gap-1.5 rounded-xl border-2 px-3 text-xs font-bold uppercase tracking-wider transition-transform ${
+            className={`flex h-10 items-center gap-1.5 rounded-xl border-2 px-3 text-xs font-black uppercase tracking-wider transition-transform ${
               hbPressed
                 ? 'scale-95 border-rose-400 bg-rose-600/80 text-white'
                 : 'border-slate-500/60 bg-[#090d16]/80 text-rose-300'
             }`}
           >
             <Hand className="h-4 w-4" />
-            <span>P</span>
+            <span>DRIFT</span>
           </button>
         </div>
 
-        {/* Pedals Row */}
+        {/* Pedals */}
         <div className="flex items-end gap-3">
-          {/* BRAKE PEDAL */}
           <button
             type="button"
             aria-label="Tormoz pedali"
@@ -281,7 +293,6 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
             <span className="text-[11px] font-black tracking-wider">TORMOZ</span>
           </button>
 
-          {/* ACCELERATOR PEDAL */}
           <button
             type="button"
             aria-label="Gaz pedali"

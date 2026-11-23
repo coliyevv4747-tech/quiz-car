@@ -15,9 +15,9 @@ export default defineConfig(() => {
         includeAssets: ['icon.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-maskable-512x512.png'],
         manifest: {
           id: '/',
-          name: 'UZB PARKING 3D',
-          short_name: 'UZB Parking',
-          description: 'Android smartfonlar uchun professional 3D avtomobil va parkovka simulyatori.',
+          name: 'UZB STREET RACING 3D',
+          short_name: 'UZB Racing',
+          description: 'Android smartfonlar uchun professional 3D poyga va avtomobil simulyatori.',
           theme_color: '#090d16',
           background_color: '#090d16',
           display: 'standalone',

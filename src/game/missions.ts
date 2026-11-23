@@ -235,34 +235,41 @@ export function createParkingMissionVisuals(
   };
 }
 
-export function createCityDrivingVisuals(): MissionSceneObjects {
+export function createCityDrivingVisuals(colorHex = 0x10b981): MissionSceneObjects {
   const group = new THREE.Group();
   const cpMat = new THREE.MeshBasicMaterial({
-    color: 0x10b981,
+    color: colorHex,
     transparent: true,
-    opacity: 0.85,
+    opacity: 0.88,
     side: THREE.DoubleSide,
     depthWrite: false,
   });
 
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.22, 12, 32), cpMat);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(4.0, 0.24, 12, 32), cpMat);
   ring.rotation.x = Math.PI / 2;
-  ring.position.y = 0.25;
+  ring.position.y = 0.26;
 
   const pillar = new THREE.Mesh(
-    new THREE.CylinderGeometry(2.8, 2.8, 7.5, 24, 1, true),
+    new THREE.CylinderGeometry(3.6, 3.6, 9.0, 24, 1, true),
     new THREE.MeshBasicMaterial({
-      color: 0x10b981,
+      color: colorHex,
       transparent: true,
-      opacity: 0.14,
+      opacity: 0.16,
       side: THREE.DoubleSide,
       depthWrite: false,
     })
   );
-  pillar.position.y = 3.75;
+  pillar.position.y = 4.5;
+
+  const arrow = new THREE.Mesh(
+    new THREE.ConeGeometry(0.9, 1.8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.9 })
+  );
+  arrow.rotation.x = Math.PI;
+  arrow.position.y = 5.5;
 
   const marker = new THREE.Group();
-  marker.add(ring, pillar);
+  marker.add(ring, pillar, arrow);
   if (CITY_CHECKPOINTS.length > 0) {
     marker.position.set(CITY_CHECKPOINTS[0].x, 0, CITY_CHECKPOINTS[0].z);
   }
@@ -273,8 +280,10 @@ export function createCityDrivingVisuals(): MissionSceneObjects {
   };
 
   const updateVisuals = (timeSec: number) => {
-    ring.position.y = 0.22 + Math.sin(timeSec * 4) * 0.12;
-    pillar.rotation.y = timeSec * 0.8;
+    ring.position.y = 0.24 + Math.sin(timeSec * 4) * 0.12;
+    pillar.rotation.y = timeSec * 0.9;
+    arrow.position.y = 5.4 + Math.sin(timeSec * 4.5) * 0.35;
+    arrow.rotation.y = timeSec * 1.5;
   };
 
   const dispose = () => {
