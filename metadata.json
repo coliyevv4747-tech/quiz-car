@@ -1,0 +1,6 @@
+{
+  "name": "UZB PARKING 3D",
+  "description": "Android smartfonlar uchun professional 3D avtomobil va parkovka simulyatori.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
